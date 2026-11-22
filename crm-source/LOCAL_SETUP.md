@@ -102,4 +102,3 @@ Si se admite acceso mediante cabeceras `oai-authenticated-user-*`, el gateway de
 validarlas e impedir que un visitante las falsifique: el código confía en ellas.
 El usuario simulado de desarrollo no sustituye esta configuración. Quedan por
 validar los inicios de sesión reales por PIN y por Sites, con acceso autorizado.
-
