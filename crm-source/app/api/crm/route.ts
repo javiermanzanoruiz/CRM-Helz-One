@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, like } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { getPinOwnerId } from "../../pin-auth";
 import { getDb } from "../../../db";
@@ -48,28 +48,12 @@ async function ownerIdOrNull() {
   return user?.userId ?? await getPinOwnerId();
 }
 
-async function deleteProvisionalOctoberClients(db: ReturnType<typeof getDb>, ownerId: string) {
-  if (ownerId !== "helzone-javier") return;
-  const provisional = await db.select({ id: clients.id }).from(clients)
-    .where(and(eq(clients.ownerId, ownerId), like(clients.id, "oct26-client-%")));
-  const ids = provisional.map((client) => client.id);
-  if (!ids.length) return;
-  await db.delete(checkins).where(and(eq(checkins.ownerId, ownerId), inArray(checkins.clientId, ids)));
-  await db.delete(tasks).where(and(eq(tasks.ownerId, ownerId), inArray(tasks.clientId, ids)));
-  await db.delete(tanitaAssessments).where(and(eq(tanitaAssessments.ownerId, ownerId), inArray(tanitaAssessments.clientId, ids)));
-  await db.delete(professionalNotes).where(and(eq(professionalNotes.ownerId, ownerId), inArray(professionalNotes.clientId, ids)));
-  await db.delete(monthlyDues).where(and(eq(monthlyDues.ownerId, ownerId), inArray(monthlyDues.clientId, ids)));
-  await db.delete(transactions).where(and(eq(transactions.ownerId, ownerId), like(transactions.id, "oct26-payment-%")));
-  await db.delete(clients).where(and(eq(clients.ownerId, ownerId), inArray(clients.id, ids)));
-}
-
 export async function GET(request: Request) {
   const ownerId = await ownerIdOrNull();
   if (!ownerId) return response({ error: "Inicia sesión para continuar." }, 401);
 
   try {
     const db = getDb();
-    await deleteProvisionalOctoberClients(db, ownerId);
     const today = new Date().toISOString().slice(0, 10);
     const month = new URL(request.url).searchParams.get("month") || today.slice(0, 7);
     if (!/^\d{4}-\d{2}$/.test(month)) return response({ error: "Mes no válido." }, 400);

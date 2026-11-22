@@ -43,12 +43,13 @@ compatible o HTTPS.
 - `npx tsc --noEmit --incremental false`: sin errores.
 - `npm run lint -- --max-warnings 0`: sin errores ni advertencias.
 - `npm run build`: correcto.
-- `node --experimental-strip-types --test tests/api-response.test.mjs`:
-  cuatro pruebas correctas (JSON válido, error de API, error mal formado y no JSON).
-- Workers compilado ejecutado en loopback, puerto 8787; `/` y `/profesionales`
+- `node --experimental-strip-types --test tests/*.test.mjs`:
+  cinco pruebas correctas (JSON válido, error de API, error mal formado, no JSON
+  y regresión del GET sin borrado con propietario/prefijo históricos).
+- Workers compilado ejecutado en loopback, puerto 8788 en la última comprobación; `/` y `/profesionales`
   responden 200; ambas APIs de datos sin autenticar responden 401.
 - Nueve migraciones aplicadas mediante Wrangler `--local` sobre una D1 temporal
-  en `/tmp/helzone-d1-review`; `/api/crm` devuelve diez colecciones vacías.
+  en un directorio nuevo `/tmp/helzone-no-cleanup.*`; `/api/crm` devuelve diez colecciones vacías.
   Se simuló la cabecera de identidad de Sites únicamente en loopback con una
   identidad de prueba, sin PIN ni secretos. No valida el login real de Sites ni
   las sesiones por PIN. Las tablas permanecieron vacías tras las peticiones.
@@ -72,11 +73,10 @@ estado local; inicializar esa base aparte si se necesita el flujo de desarrollo.
 
 ## Hallazgo que revisar antes de conectar datos
 
-`app/api/crm/route.ts` llama a `deleteProvisionalOctoberClients` desde `GET`.
-Para el propietario `helzone-javier`, borra clientes con ID `oct26-client-%`,
-registros asociados y transacciones `oct26-payment-%`. Se conserva el código
-importado para revisión; no se ejecutó contra datos reales. Además, ese GET puede
-crear cuotas mensuales. No usar una base real para probar esta copia.
+La limpieza automática `deleteProvisionalOctoberClients` y su llamada desde
+`GET /api/crm` se han eliminado. Consultar el CRM ya no borra clientes históricos,
+registros asociados ni pagos. El GET sigue pudiendo crear cuotas mensuales para
+clientes activos: no es una operación estrictamente de solo lectura.
 
 También `DELETE /api/crm` elimina definitivamente un cliente, sus checkins,
 tareas, valoraciones Tanita, notas profesionales y cuotas; conserva los movimientos
@@ -84,9 +84,9 @@ de caja, pero pone su `clientId` a null. Son varias operaciones sin una transacc
 que garantice que se completen todas juntas. El frontend pide confirmación, pero
 la API no añade una segunda confirmación. No se invocó este borrado en la validación.
 
-Las dos rutinas se conservan para revisión; corregir tipos y lint no implica que
-sean seguras para producción. Revisar y retirar o aislar la limpieza automática
-antes de conectar datos reales. No se han modificado las reglas de negocio.
+El borrado explícito mediante DELETE se conserva para revisión. La prueba de
+regresión del GET usa una base simulada y un identificador sintético con el
+prefijo histórico; no accede a datos reales ni ejecuta el endpoint DELETE.
 
 ## Conexión de la aplicación real (pendiente, no ejecutada)
 
