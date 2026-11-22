@@ -1,5 +1,7 @@
 "use client";
 
+import { readApiResponse } from "../../lib/api-response";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 type Role = "fisioterapia" | "podologia";
@@ -18,8 +20,7 @@ export function ProfessionalLogin() {
     event.preventDefault(); setBusy(true); setError("");
     try {
       const response = await fetch("/api/professional-access", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role, code }) });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "No se pudo validar el acceso.");
+      await readApiResponse(response, "No se pudo validar el acceso.");
       window.location.replace(`/profesionales?entrada=${Date.now()}`);
     } catch (e) { setError(e instanceof Error ? e.message : "No se pudo validar el acceso."); }
     finally { setBusy(false); }
@@ -43,15 +44,11 @@ export function ProfessionalPortal({ role }: { role: Role }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const load = useCallback(async () => {
-    try {
-      const response = await fetch("/api/professional", { cache: "no-store" });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "No se pudieron cargar las fichas.");
-      setData(result); setError("");
-    } catch (e) { setError(e instanceof Error ? e.message : "No se pudieron cargar las fichas."); }
-  }, []);
-  useEffect(() => { void load(); }, [load]);
+  const load = useCallback((signal?:AbortSignal) => fetch("/api/professional", { cache: "no-store", signal })
+    .then(response=>readApiResponse<Dataset>(response,"No se pudieron cargar las fichas."))
+    .then(result=>{if(!signal?.aborted){setData(result);setError("");}})
+    .catch((e:unknown)=>{if(!signal?.aborted)setError(e instanceof Error?e.message:"No se pudieron cargar las fichas.");}), []);
+  useEffect(() => { const controller=new AbortController();void load(controller.signal);return ()=>controller.abort(); }, [load]);
   const filtered = useMemo(() => (data?.clients||[]).filter(c => `${c.name} ${c.service} ${c.importantNotes}`.toLocaleLowerCase("es").includes(search.toLocaleLowerCase("es"))), [data, search]);
   const selected = data?.clients.find(c=>c.id===selectedId) || filtered[0] || null;
   const notes = (data?.notes||[]).filter(n=>n.clientId===selected?.id).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
@@ -60,8 +57,7 @@ export function ProfessionalPortal({ role }: { role: Role }) {
     setBusy(true);setError("");setNotice("");
     try {
       const response = await fetch("/api/professional", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientId: selected.id, note: draft }) });
-      const result = await response.json();
-      if(!response.ok)throw new Error(result.error||"No se pudo guardar la anotación.");
+      await readApiResponse(response, "No se pudo guardar la anotación.");
       setDraft("");setNotice("Anotación guardada en el historial de la ficha.");await load();
     } catch(e) { setError(e instanceof Error?e.message:"No se pudo guardar la anotación."); }
     finally { setBusy(false); }

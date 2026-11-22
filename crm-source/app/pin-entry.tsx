@@ -1,5 +1,7 @@
 "use client";
 
+import { readApiResponse } from "../lib/api-response";
+
 import { useState } from "react";
 
 export function PinEntry() {
@@ -15,8 +17,7 @@ export function PinEntry() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pin }), cache: "no-store",
       });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "No se pudo abrir el CRM.");
+      await readApiResponse(response, "No se pudo abrir el CRM.");
       window.location.reload();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "No se pudo abrir el CRM.");
