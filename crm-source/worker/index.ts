@@ -1,9 +1,22 @@
+import { authenticate, authorize, checkMutationOrigin, AccessError } from "../lib/access";
+import { runWithIdentity } from "../lib/access-context";
 import handler from "vinext/server/fetch-handler";
 import { runWithConnectorBinding } from "../lib/connector-context";
 import type { ConnectorBinding } from "../lib/connector-contract.mjs";
 
 const worker = {
-  fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext<{ CONNECTORS?: ConnectorBinding }>) {
+  async fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext<{ CONNECTORS?: ConnectorBinding }>) {
+    let identity;
+    try {
+      identity = await authenticate(request, env);
+      authorize(request, identity);
+      checkMutationOrigin(request);
+    } catch (error) {
+      return Response.json({ error: "Acceso no autorizado o configuración incompleta." }, {
+        status: error instanceof AccessError ? error.status : 503,
+        headers: { "Cache-Control": "no-store" },
+      });
+    }
     let binding = ctx.props?.CONNECTORS;
     // Local preview emulates the same request-scoped capability. This branch and
     // the auxiliary service binding are absent from production builds.
@@ -23,7 +36,10 @@ const worker = {
         },
       };
     }
-    return runWithConnectorBinding(binding, () => handler.fetch(request, env, ctx));
+    const response = await runWithIdentity(identity, () => runWithConnectorBinding(binding, () => handler.fetch(request, env, ctx)));
+    const result = new Response(response.body, response);
+    result.headers.set("Cache-Control", "private, no-store");
+    return result;
   },
 };
 

@@ -11,31 +11,6 @@ type Dataset = { role: Role; clients: Client[]; notes: Note[] };
 const labels: Record<Role,string> = { fisioterapia: "Fisioterapia", podologia: "Podología" };
 const todayLabel = (value: string) => value ? new Date(value).toLocaleDateString("es-ES", { dateStyle: "medium", timeStyle: "short" }) : "Fecha no disponible";
 
-export function ProfessionalLogin() {
-  const [role, setRole] = useState<Role>("fisioterapia");
-  const [code, setCode] = useState("");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  async function login(event: React.FormEvent) {
-    event.preventDefault(); setBusy(true); setError("");
-    try {
-      const response = await fetch("/api/professional-access", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role, code }) });
-      await readApiResponse(response, "No se pudo validar el acceso.");
-      window.location.replace(`/profesionales?entrada=${Date.now()}`);
-    } catch (e) { setError(e instanceof Error ? e.message : "No se pudo validar el acceso."); }
-    finally { setBusy(false); }
-  }
-  return <main className="professional-login"><form className="professional-login-card" onSubmit={login}>
-    <div className="pro-brand-mark">H</div><div className="pro-eyebrow">HELZ-ONE · ÁREA PROFESIONAL</div>
-    <h1>Fichas de clientes</h1><p>Acceso restringido para profesionales del centro.</p>
-    <label>Área profesional<select value={role} onChange={e=>setRole(e.target.value as Role)}><option value="fisioterapia">Fisioterapia</option><option value="podologia">Podología</option></select></label>
-    <label>Código de acceso<input type="password" value={code} onChange={e=>setCode(e.target.value)} autoComplete="current-password" required maxLength={100} /></label>
-    {error&&<div className="pro-error">{error}</div>}
-    <button className="pro-button pro-button-primary" disabled={busy}>{busy?"Validando…":"Entrar al área profesional"}</button>
-    <small>Este acceso no muestra cuotas, cobros ni información económica.</small>
-  </form></main>;
-}
-
 export function ProfessionalPortal({ role }: { role: Role }) {
   const [data, setData] = useState<Dataset|null>(null);
   const [selectedId, setSelectedId] = useState("");
@@ -62,14 +37,7 @@ export function ProfessionalPortal({ role }: { role: Role }) {
     } catch(e) { setError(e instanceof Error?e.message:"No se pudo guardar la anotación."); }
     finally { setBusy(false); }
   }
-  async function logout() {
-    setError(""); setNotice(""); setBusy(true);
-    try {
-      const response = await fetch("/api/professional-access", { method: "DELETE", cache: "no-store" });
-      if (!response.ok) throw new Error("No se pudo cerrar la sesión profesional.");
-      window.location.replace("/profesionales");
-    } catch (e) { setError(e instanceof Error ? e.message : "No se pudo cerrar la sesión profesional."); setBusy(false); }
-  }
+  function logout() { window.location.assign(new URL("/cdn-cgi/access/logout", window.location.origin).href); }
   return <main className="professional-app">
     <header className="professional-topbar"><div className="professional-brand"><span className="pro-brand-mark small">H</span><div><strong>HELZ-ONE</strong><small>FICHAS PROFESIONALES</small></div></div><div className="professional-account"><span>{labels[role]}</span><button onClick={()=>void logout()}>Cerrar sesión</button></div></header>
     <div className="professional-layout">

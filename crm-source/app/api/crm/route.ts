@@ -1,6 +1,6 @@
 import { and, desc, eq } from "drizzle-orm";
-import { getChatGPTUser } from "../../chatgpt-auth";
-import { getPinOwnerId } from "../../pin-auth";
+import { getIdentity } from "../../../lib/access-context";
+import { OWNER_ID } from "../../../lib/access";
 import { getDb } from "../../../db";
 import { checkins, clients, crossSellOffers, leads, monthlyDues, professionalNotes, supplementPlans, tanitaAssessments, tasks, transactions } from "../../../db/schema";
 
@@ -44,8 +44,7 @@ const response = (body: unknown, status = 200) =>
   });
 
 async function ownerIdOrNull() {
-  const user = await getChatGPTUser();
-  return user?.userId ?? await getPinOwnerId();
+  return getIdentity()?.role === "admin" ? OWNER_ID : null;
 }
 
 export async function GET(request: Request) {

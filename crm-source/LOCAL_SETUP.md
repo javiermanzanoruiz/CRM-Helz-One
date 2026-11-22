@@ -1,104 +1,95 @@
-# Importación v22 y ejecución local
+# Desarrollo local: Google mediante Cloudflare Access
 
-El código se importa del ZIP `helzone-crm-source-v22.zip`. El `index.html`
-de la raíz sigue siendo la página de acceso, sin cambios. Esta importación no
-publica el CRM ni modifica su servicio o base de datos de producción.
-Se ha retirado `project_id` de `.openai/hosting.json` para desacoplar esta copia
-del proyecto alojado. Se conserva el binding lógico `DB`.
+Rama `feature/cloudflare-access-google`, basada en la corrección de la PR #1.
+El `index.html` raíz sigue intacto. No se ha desplegado, cambiado la aplicación
+publicada, conectado D1 real ni migrado datos.
 
-## Configuración pendiente
+## Arquitectura revisada antes de modificar autenticación
 
-- Node.js >=22.13 (validado con 24.22.3) y dependencias del lockfile.
-- Crear `crm-source/.dev.vars`, ignorado por Git, a partir de `.env.example`,
-  sustituyendo los cuatro marcadores por valores exclusivos de desarrollo:
-  `CRM_ACCESS_PIN`, `CRM_PHYSIO_PIN`, `CRM_PODOLOGY_PIN` y
-  `CRM_SESSION_SECRET` (secreto aleatorio largo). No reutilizar secretos reales.
-  La aplicación lee bindings de Workers; un `.env` por sí solo no garantiza
-  que estén disponibles en `cloudflare:workers`.
-- Inicializar las nueve migraciones `drizzle/0000_*.sql` a `0008_*.sql`,
-  en orden, en D1 **local** con binding `DB`. Vite ya configura una base local
-  con ID de marcador; no hace falta una cuenta Cloudflare para la emulación.
-  Se aplicaron las nueve migraciones solo a una D1 local temporal vacía;
-  no se importaron registros ni se contactó con D1 remota.
-- No habilitar un destino remoto: cualquier entorno compartido futuro necesita
-  su propia D1 vacía, secretos y configuración de hosting, revisados aparte.
+[docs/CLOUDFLARE_ACCESS.md](docs/CLOUDFLARE_ACCESS.md) documenta la inspección del
+Worker generado y los pasos exactos que debe realizar el operador en Cloudflare.
+El wrapper recibe el Request original y verifica Access antes de Vinext. La
+identidad se transporta en AsyncLocalStorage, aislada por petición, no en una
+cabecera de correo que pueda falsificar el cliente. La prueba de integración
+confirma ese recorrido en el paquete compilado.
 
-Desde `crm-source/`:
+Se verifica el JWT `Cf-Access-Jwt-Assertion` con `jose`: firma RS256, claves del
+endpoint HTTPS del equipo configurado, issuer, audience, exp, iat, nbf cuando
+existe, subject, email y tipo de token de usuario. Los permisos se consultan
+externamente después de verificar el JWT. No se usan las cabeceras de correo de
+Access/Sites sin verificar ni las antiguas cookies/PIN. Los endpoints antiguos
+responden 410 y ya no emiten sesiones. La falta de configuración devuelve 503;
+la falta de identidad válida, 401; una identidad sin permiso, 403.
+
+## Configuración externa pendiente
+
+- `CF_ACCESS_TEAM_DOMAIN`: hostname del equipo, como `your-team.cloudflareaccess.com`.
+- `CF_ACCESS_AUD`: Application Audience del CRM, no el client ID de Google.
+- `CRM_ACCESS_USERS`: JSON con correo como clave y `{ "role": "admin" }`,
+  `{ "role": "fisioterapia", "clientIds": ["id-de-ficha"] }` o
+  `{ "role": "podologia", "clientIds": ["id-de-ficha"] }`. Guardar en un
+  binding/secreto de Workers, nunca en Git. La plantilla vacía deniega a todos.
+- Google como único proveedor permitido de la aplicación Access; proteger todo
+  el hostname y API, sin bypass. Las credenciales OAuth se guardan en Cloudflare.
+- Binding `DB`, dominio HTTPS, protección de aliases y rutas workers.dev/preview,
+  sin caché compartida de respuestas privadas. Confirmar que el operador de Sites
+  permite configurar Access; de lo contrario preparar un Worker separado.
+
+El administrador ve el CRM completo con el owner_id estable `helzone-javier`.
+Los profesionales solo ven las fichas asignadas a su cuenta bajo ese propietario,
+y las anotaciones de su área. Las notas son compartidas por área para las fichas
+asignadas, no privadas por autor. El servidor fija rol y propietario al guardar:
+no acepta los del cuerpo de la petición. No expone campos de cuotas/pagos por la
+API profesional. No tener asignaciones equivale a no tener acceso a fichas.
+El filtro de términos financieros en texto libre es una ayuda heredada, no una
+clasificación infalible: no guardar información financiera en campos clínicos.
+
+No se derivan nuevos propietarios de Google ni se reescriben registros. El portal
+anterior consultaba también un propietario UUID histórico; esta versión no mezcla
+sus datos con el propietario actual. Revisar esa situación por separado antes
+de conectar la aplicación real, sin ejecutar migraciones automáticas.
+
+## Instalación y validación sin credenciales reales
+
+Node.js >=22.13; verificado con Node 24.22.3.
 
 ```sh
 npm run install:ci
+npx tsc --noEmit --incremental false
+npm run lint -- --max-warnings 0
+npm test
 npm run build
-npm run dev -- --host 127.0.0.1
+npm run test:integration
 ```
 
-El servidor de desarrollo usa el puerto 5173. La persistencia local de Workers
-queda en `.wrangler/`, excluida de Git. La configuración portable incluye un
-usuario simulado de Sites (`sites.test`): no valida autenticación real de Sites
-ni debe exponerse como servidor público. El acceso por PIN necesita las variables
-anteriores; las cookies de sesión llevan `Secure` y requieren un contexto local
-compatible o HTTPS.
+`npm test` ejecuta 20 pruebas: validación criptográfica, claims y errores, permisos,
+aislamiento concurrente, límites de fichas/áreas, mutaciones y regresión del GET
+sin borrado. Las direcciones `example.test` e IDs de las pruebas son simulados.
 
-## Validación tras las correcciones
+La integración ejecuta el Worker compilado en Miniflare y crea D1 local efímera
+con las nueve migraciones. Genera las claves RSA solo en memoria, simula el JWKS
+con fetchMock y bloquea cualquier conexión de red real. Comprueba los tres roles,
+páginas, redirecciones, APIs, ausencia de acceso por correo falsificado, ausencia
+de caché pública y que D1 sigue vacía. No existe una variable de bypass para
+identidades simuladas en el Worker de producción.
 
-- `npx tsc --noEmit --incremental false`: sin errores.
-- `npm run lint -- --max-warnings 0`: sin errores ni advertencias.
-- `npm run build`: correcto.
-- `node --experimental-strip-types --test tests/*.test.mjs`:
-  cinco pruebas correctas (JSON válido, error de API, error mal formado, no JSON
-  y regresión del GET sin borrado con propietario/prefijo históricos).
-- Workers compilado ejecutado en loopback, puerto 8788 en la última comprobación; `/` y `/profesionales`
-  responden 200; ambas APIs de datos sin autenticar responden 401.
-- Nueve migraciones aplicadas mediante Wrangler `--local` sobre una D1 temporal
-  en un directorio nuevo `/tmp/helzone-no-cleanup.*`; `/api/crm` devuelve diez colecciones vacías.
-  Se simuló la cabecera de identidad de Sites únicamente en loopback con una
-  identidad de prueba, sin PIN ni secretos. No valida el login real de Sites ni
-  las sesiones por PIN. Las tablas permanecieron vacías tras las peticiones.
-- El `index.html` raíz y el lockfile permanecen intactos.
+`npm run dev -- --host 127.0.0.1` puede usarse para desarrollo, pero sin configuración
+Access devolverá 503; no se introduce un login ficticio en el servidor. Para probar
+el flujo Google real se requiere un entorno separado protegido por Access y la
+configuración anterior. Los valores locales, si fueran necesarios, irían en
+`.dev.vars` ignorado por Git. No copiar secretos de producción.
 
-Para repetir la prueba del paquete compilado en una base nueva (desde `crm-source`):
+## Operaciones destructivas que siguen requiriendo revisión
 
-```sh
-npm run build
-review_state=$(mktemp -d /tmp/helzone-d1.XXXXXX)
-review_sql=$(mktemp /tmp/helzone-schema.XXXXXX.sql)
-cat drizzle/0*.sql > "$review_sql"
-node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to "$review_state" --file "$review_sql"
-mkdir -p .sites-runtime/xdg-config
-XDG_CONFIG_HOME="$PWD/.sites-runtime/xdg-config" node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js dev --config dist/server/wrangler.json --local --persist-to "$review_state" --ip 127.0.0.1 --port 8787 --inspector-port 0
-```
+Se eliminó `deleteProvisionalOctoberClients` y su llamada desde GET. Consultar el
+CRM no borra registros; GET aún puede crear cuotas de clientes activos.
 
-Esta prueba usa un directorio temporal nuevo; no aplicar de nuevo el SQL completo
-sobre una base ya inicializada. El servidor de `npm run dev` tiene su propio
-estado local; inicializar esa base aparte si se necesita el flujo de desarrollo.
+`DELETE /api/crm`, accesible solo al administrador, borra la ficha, checkins,
+tareas, valoraciones, notas profesionales y cuotas; conserva movimientos de caja
+con clientId nulo. Son varias operaciones sin transacción conjunta. El frontend
+pide confirmación. Esta operación se conserva; no se probó contra datos reales.
 
-## Hallazgo que revisar antes de conectar datos
-
-La limpieza automática `deleteProvisionalOctoberClients` y su llamada desde
-`GET /api/crm` se han eliminado. Consultar el CRM ya no borra clientes históricos,
-registros asociados ni pagos. El GET sigue pudiendo crear cuotas mensuales para
-clientes activos: no es una operación estrictamente de solo lectura.
-
-También `DELETE /api/crm` elimina definitivamente un cliente, sus checkins,
-tareas, valoraciones Tanita, notas profesionales y cuotas; conserva los movimientos
-de caja, pero pone su `clientId` a null. Son varias operaciones sin una transacción
-que garantice que se completen todas juntas. El frontend pide confirmación, pero
-la API no añade una segunda confirmación. No se invocó este borrado en la validación.
-
-El borrado explícito mediante DELETE se conserva para revisión. La prueba de
-regresión del GET usa una base simulada y un identificador sintético con el
-prefijo histórico; no accede a datos reales ni ejecuta el endpoint DELETE.
-
-## Conexión de la aplicación real (pendiente, no ejecutada)
-
-Se necesita un destino Workers/Sites autorizado y su binding `DB` apuntando a la
-D1 correcta (el ID actual es un marcador local), los cuatro secretos del apartado
-anterior en el gestor seguro del destino, y HTTPS/dominio y configuración de
-hosting. Si se usa Sites, restaurar deliberadamente su identidad de proyecto en
-la configuración de ese destino. GitHub Pages no ejecuta este backend.
-
-Para una D1 existente, comprobar su historial de migraciones y hacer copia de
-seguridad antes de planificar cambios; no aplicar todas las migraciones a ciegas.
-Si se admite acceso mediante cabeceras `oai-authenticated-user-*`, el gateway debe
-validarlas e impedir que un visitante las falsifique: el código confía en ellas.
-El usuario simulado de desarrollo no sustituye esta configuración. Quedan por
-validar los inicios de sesión reales por PIN y por Sites, con acceso autorizado.
+Antes de activar una conexión real: revisar permisos y asignaciones, confirmar
+propietario, backups e historial de migraciones, probar login/revocación/logout
+con Google y autorización de cada rol en un entorno separado. La validación local
+no certifica que el dominio actual tenga Cloudflare Access configurado.

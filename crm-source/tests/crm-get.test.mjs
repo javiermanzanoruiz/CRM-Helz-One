@@ -26,8 +26,8 @@ test('GET preserves legacy-prefixed records for the legacy owner without deletin
   const schema = new Proxy({}, { get: (_, table) => table });
   const modules = {
     'drizzle-orm': { and: () => null, desc: () => null, eq: () => null, inArray: () => null, like: () => null },
-    '../../chatgpt-auth': { getChatGPTUser: async () => null },
-    '../../pin-auth': { getPinOwnerId: async () => 'helzone-javier' },
+    '../../../lib/access-context': { getIdentity: () => ({ role: 'admin' }) },
+    '../../../lib/access': { OWNER_ID: 'helzone-javier' },
     '../../../db': { getDb: () => db },
     '../../../db/schema': schema,
   };

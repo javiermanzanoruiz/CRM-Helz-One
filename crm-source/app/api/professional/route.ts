@@ -1,11 +1,10 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
-import { getProfessionalRole } from "../../professional-auth";
+import { getIdentity } from "../../../lib/access-context";
+import { OWNER_ID } from "../../../lib/access";
 import { getDb } from "../../../db";
 import { clients, professionalNotes } from "../../../db/schema";
 
 export const dynamic = "force-dynamic";
-const OWNER_ID = "63df2760-7db7-44d3-84e9-b6a2c5f8cd3c";
-const OWNER_IDS = [OWNER_ID, "helzone-javier"];
 const response = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 const financialTerms = /\b(?:cuotas?|cobros?|cobrar|pagos?|pagar|pagad[oa]s?|precios?|importes?|ingresos?|gastos?|facturas?|mensualidades?|deudas?|transferencias?|bizum|efectivo|tarjetas?|caja|euros?)\b|€/i;
 
@@ -19,8 +18,10 @@ function clinicalText(value: string | null | undefined) {
 }
 
 export async function GET() {
-  const role = await getProfessionalRole();
+  const identity = getIdentity();
+  const role = identity?.role === "fisioterapia" || identity?.role === "podologia" ? identity.role : null;
   if (!role) return response({ error: "Inicia sesión para consultar las fichas." }, 401);
+  if (!identity?.clientIds.length) return response({ role, clients: [], notes: [] });
   try {
     const db = getDb();
     const [clientRows, noteRows] = await Promise.all([
@@ -38,10 +39,10 @@ export async function GET() {
         trainingNotes: clients.trainingNotes,
         trainingMetrics: clients.trainingMetrics,
         physioNotes: clients.physioNotes,
-      }).from(clients).where(inArray(clients.ownerId, OWNER_IDS)).orderBy(asc(clients.name)).limit(1000),
+      }).from(clients).where(and(eq(clients.ownerId, OWNER_ID), inArray(clients.id, identity!.clientIds))).orderBy(asc(clients.name)).limit(1000),
       db.select({ id: professionalNotes.id, clientId: professionalNotes.clientId, note: professionalNotes.note, createdAt: professionalNotes.createdAt })
         .from(professionalNotes)
-        .where(and(inArray(professionalNotes.ownerId, OWNER_IDS), eq(professionalNotes.professionalRole, role)))
+        .where(and(eq(professionalNotes.ownerId, OWNER_ID), inArray(professionalNotes.clientId, identity!.clientIds), eq(professionalNotes.professionalRole, role)))
         .orderBy(asc(professionalNotes.createdAt)).limit(5000),
     ]);
     const clinicalClients = clientRows.map((client) => ({
@@ -69,16 +70,18 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const role = await getProfessionalRole();
+  const identity = getIdentity();
+  const role = identity?.role === "fisioterapia" || identity?.role === "podologia" ? identity.role : null;
   if (!role) return response({ error: "Inicia sesión para guardar anotaciones." }, 401);
   try {
     const body = await request.json() as { clientId?: unknown; note?: unknown };
     const clientId = typeof body.clientId === "string" ? body.clientId.trim().slice(0, 64) : "";
     const note = typeof body.note === "string" ? body.note.trim().slice(0, 3000) : "";
+    if (!identity?.clientIds.includes(clientId)) return response({ error: "Ficha no autorizada." }, 403);
     if (!clientId || !note) return response({ error: "Selecciona un cliente y escribe la anotación." }, 400);
     const db = getDb();
     const [client] = await db.select({ id: clients.id, ownerId: clients.ownerId }).from(clients)
-      .where(and(eq(clients.id, clientId), inArray(clients.ownerId, OWNER_IDS))).limit(1);
+      .where(and(eq(clients.id, clientId), and(eq(clients.ownerId, OWNER_ID), inArray(clients.id, identity!.clientIds)))).limit(1);
     if (!client) return response({ error: "No se ha encontrado ese cliente." }, 404);
     const [created] = await db.insert(professionalNotes).values({
       id: crypto.randomUUID(), ownerId: client.ownerId, clientId, professionalRole: role, note,
