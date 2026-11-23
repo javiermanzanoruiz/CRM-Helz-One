@@ -1,3 +1,4 @@
+import { accessEnabled } from "../../access-identity";
 import { env } from "cloudflare:workers";
 import { createProfessionalSession, professionalCookieName, professionalSessionMaxAge, type ProfessionalRole } from "../../professional-auth";
 
@@ -17,6 +18,7 @@ async function matchesCode(expectedCode: string, suppliedCode: string) {
 }
 
 export async function POST(request: Request) {
+  if (accessEnabled()) return Response.json({ error: "Usa el acceso del equipo." }, { status: 403 });
   const address = request.headers.get("cf-connecting-ip") || "unknown";
   const now = Date.now();
   const record = failures.get(address);
@@ -49,7 +51,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE() {
-  return Response.json({ ok: true }, {
+  return Response.json({ ok: true, redirectTo: accessEnabled() ? "/cdn-cgi/access/logout" : undefined }, {
     headers: {
       "Cache-Control": "no-store",
       "Set-Cookie": `${professionalCookieName}=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT`,

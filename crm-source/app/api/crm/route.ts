@@ -1,4 +1,5 @@
 import { and, desc, eq } from "drizzle-orm";
+import { accessEnabled, accessIdentity, accessOwnerId } from "../../access-identity";
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { getPinOwnerId } from "../../pin-auth";
 import { getDb } from "../../../db";
@@ -44,6 +45,7 @@ const response = (body: unknown, status = 200) =>
   });
 
 async function ownerIdOrNull() {
+  if (accessEnabled()) return (await accessIdentity())?.role === "admin" ? accessOwnerId() : null;
   const user = await getChatGPTUser();
   return user?.userId ?? await getPinOwnerId();
 }

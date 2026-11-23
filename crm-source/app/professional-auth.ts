@@ -1,3 +1,4 @@
+import { accessEnabled, accessIdentity, accessOwnerId } from "./access-identity";
 import { cookies } from "next/headers";
 import { env } from "cloudflare:workers";
 
@@ -46,6 +47,11 @@ export async function professionalRoleIsValid(value?: string): Promise<Professio
 }
 
 export async function getProfessionalRole() {
+  if (accessEnabled()) {
+    const identity = await accessIdentity();
+    if (!identity || identity.role === "admin" || !accessOwnerId()) return null;
+    return identity.role;
+  }
   return professionalRoleIsValid((await cookies()).get(COOKIE)?.value);
 }
 

@@ -102,3 +102,22 @@ Si se admite acceso mediante cabeceras `oai-authenticated-user-*`, el gateway de
 validarlas e impedir que un visitante las falsifique: el código confía en ellas.
 El usuario simulado de desarrollo no sustituye esta configuración. Quedan por
 validar los inicios de sesión reales por PIN y por Sites, con acceso autorizado.
+
+## Entorno separado con Google y Cloudflare Access
+
+Protege el Worker de pruebas y sus URL de vista previa con una política Allow
+para tres cuentas concretas y configura Google como único proveedor. Usa
+una D1 de pruebas inicializada con datos ficticios. Define en el destino
+`CRM_AUTH_MODE=cloudflare-access`, `CRM_ACCESS_TEAM` (solo el nombre del
+equipo), `CRM_ACCESS_AUD` (audiencia de la aplicación), los tres correos
+`CRM_ADMIN_EMAIL`, `CRM_PHYSIO_EMAIL`, `CRM_PODOLOGY_EMAIL`, y
+`CRM_DATA_OWNER_ID` (el propietario de los registros en esa D1).
+La identidad la acredita el JWT firmado de Access incluso si el Worker
+usa Static Assets; la aplicación no usa cabeceras de correo ni acepta los
+PIN antiguos en este modo. Configura correos distintos para cada perfil.
+Si hay datos bajo varios propietarios en la D1 original, revisa y concilia
+esa asignación antes de migrarlos.
+
+Antes de sustituir el enlace en uso, comprueba los tres accesos, el cierre de
+sesión y el rechazo de otras cuentas. Verifica en el portal profesional que
+se guardan las anotaciones del rol y que no aparecen cuotas, pagos ni caja.

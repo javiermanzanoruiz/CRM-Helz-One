@@ -67,7 +67,7 @@ export function ProfessionalPortal({ role }: { role: Role }) {
     try {
       const response = await fetch("/api/professional-access", { method: "DELETE", cache: "no-store" });
       if (!response.ok) throw new Error("No se pudo cerrar la sesión profesional.");
-      window.location.replace("/profesionales");
+      const { redirectTo } = await response.json() as { redirectTo?: string }; window.location.replace(redirectTo === "/cdn-cgi/access/logout" ? redirectTo : "/profesionales");
     } catch (e) { setError(e instanceof Error ? e.message : "No se pudo cerrar la sesión profesional."); setBusy(false); }
   }
   return <main className="professional-app">

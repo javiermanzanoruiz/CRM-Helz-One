@@ -1,3 +1,4 @@
+import { accessEnabled, accessOwnerId } from "../../access-identity";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { getProfessionalRole } from "../../professional-auth";
 import { getDb } from "../../../db";
@@ -5,7 +6,11 @@ import { clients, professionalNotes } from "../../../db/schema";
 
 export const dynamic = "force-dynamic";
 const OWNER_ID = "63df2760-7db7-44d3-84e9-b6a2c5f8cd3c";
-const OWNER_IDS = [OWNER_ID, "helzone-javier"];
+function ownerIds() {
+  if (!accessEnabled()) return [OWNER_ID, "helzone-javier"];
+  const ownerId = accessOwnerId();
+  return ownerId ? [ownerId] : [];
+}
 const response = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 const financialTerms = /\b(?:cuotas?|cobros?|cobrar|pagos?|pagar|pagad[oa]s?|precios?|importes?|ingresos?|gastos?|facturas?|mensualidades?|deudas?|transferencias?|bizum|efectivo|tarjetas?|caja|euros?)\b|€/i;
 
@@ -38,10 +43,10 @@ export async function GET() {
         trainingNotes: clients.trainingNotes,
         trainingMetrics: clients.trainingMetrics,
         physioNotes: clients.physioNotes,
-      }).from(clients).where(inArray(clients.ownerId, OWNER_IDS)).orderBy(asc(clients.name)).limit(1000),
+      }).from(clients).where(inArray(clients.ownerId, ownerIds())).orderBy(asc(clients.name)).limit(1000),
       db.select({ id: professionalNotes.id, clientId: professionalNotes.clientId, note: professionalNotes.note, createdAt: professionalNotes.createdAt })
         .from(professionalNotes)
-        .where(and(inArray(professionalNotes.ownerId, OWNER_IDS), eq(professionalNotes.professionalRole, role)))
+        .where(and(inArray(professionalNotes.ownerId, ownerIds()), eq(professionalNotes.professionalRole, role)))
         .orderBy(asc(professionalNotes.createdAt)).limit(5000),
     ]);
     const clinicalClients = clientRows.map((client) => ({
@@ -78,7 +83,7 @@ export async function POST(request: Request) {
     if (!clientId || !note) return response({ error: "Selecciona un cliente y escribe la anotación." }, 400);
     const db = getDb();
     const [client] = await db.select({ id: clients.id, ownerId: clients.ownerId }).from(clients)
-      .where(and(eq(clients.id, clientId), inArray(clients.ownerId, OWNER_IDS))).limit(1);
+      .where(and(eq(clients.id, clientId), inArray(clients.ownerId, ownerIds()))).limit(1);
     if (!client) return response({ error: "No se ha encontrado ese cliente." }, 404);
     const [created] = await db.insert(professionalNotes).values({
       id: crypto.randomUUID(), ownerId: client.ownerId, clientId, professionalRole: role, note,
