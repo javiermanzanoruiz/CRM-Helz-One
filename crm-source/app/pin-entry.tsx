@@ -31,7 +31,7 @@ export function PinEntry() {
     <h1>Tu centro, bajo control.</h1>
     <p>Introduce tu PIN para abrir el CRM de Helz-One.</p>
     <label className="pin-label" htmlFor="crm-pin">PIN de acceso</label>
-    <input id="crm-pin" type="password" inputMode="numeric" autoComplete="current-password" pattern="[0-9]*" maxLength={8} required autoFocus value={pin} onChange={event=>setPin(event.target.value)} aria-label="PIN de acceso" />
+    <input id="crm-pin" type="password" inputMode="numeric" autoComplete="current-password" pattern="[0-9]*" maxLength={32} required autoFocus value={pin} onChange={event=>setPin(event.target.value)} aria-label="PIN de acceso" />
     {error && <div className="notice notice-error">{error}</div>}
     <button className="button button-primary pin-submit" disabled={busy}>{busy?"Validando…":"Entrar al CRM"}</button>
     <small>Acceso privado · Helz-One Morón de la Frontera</small>
