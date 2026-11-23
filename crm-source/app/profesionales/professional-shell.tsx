@@ -9,7 +9,21 @@ type Client = { id: string; name: string; status: string; service: string; frequ
 type Note = { id: string; clientId: string; note: string; createdAt: string };
 type Dataset = { role: Role; clients: Client[]; notes: Note[] };
 const labels: Record<Role,string> = { fisioterapia: "Fisioterapia", podologia: "Podología" };
-const todayLabel = (value: string) => value ? new Date(value).toLocaleDateString("es-ES", { dateStyle: "medium", timeStyle: "short" }) : "Fecha no disponible";
+const noteDateFormat = new Intl.DateTimeFormat("es-ES", {
+  dateStyle: "medium",
+  timeStyle: "short",
+  timeZone: "Europe/Madrid",
+});
+
+function todayLabel(value: string) {
+  if (!value) return "Fecha no disponible";
+  // SQLite CURRENT_TIMESTAMP returns UTC without a timezone suffix.
+  const timestamp = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value)
+    ? value.replace(" ", "T") + "Z"
+    : value;
+  const date = new Date(timestamp);
+  return Number.isFinite(date.getTime()) ? noteDateFormat.format(date) : "Fecha no disponible";
+}
 
 export function ProfessionalLogin() {
   const [role, setRole] = useState<Role>("fisioterapia");
