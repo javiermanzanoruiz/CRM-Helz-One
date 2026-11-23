@@ -1,3 +1,4 @@
+import { pinOnlyEnabled, pinOnlyReady } from "../../pin-only";
 import { env } from "cloudflare:workers";
 import { createProfessionalSession, professionalCookieName, professionalSessionMaxAge, type ProfessionalRole } from "../../professional-auth";
 
@@ -17,6 +18,9 @@ async function matchesCode(expectedCode: string, suppliedCode: string) {
 }
 
 export async function POST(request: Request) {
+  if (pinOnlyEnabled() && !pinOnlyReady()) {
+    return Response.json({ error: "Acceso pendiente de configuración." }, { status: 503 });
+  }
   const address = request.headers.get("cf-connecting-ip") || "unknown";
   const now = Date.now();
   const record = failures.get(address);

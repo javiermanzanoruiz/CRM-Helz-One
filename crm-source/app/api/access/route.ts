@@ -1,3 +1,4 @@
+import { pinOnlyEnabled, pinOnlyReady } from "../../pin-only";
 import { env } from "cloudflare:workers";
 import { createPinSession, pinCookieName, pinSessionMaxAge } from "../../pin-auth";
 
@@ -5,6 +6,9 @@ export const dynamic = "force-dynamic";
 const failures = new Map<string, { count: number; resetAt: number }>();
 
 export async function POST(request: Request) {
+  if (pinOnlyEnabled() && !pinOnlyReady()) {
+    return Response.json({ error: "Acceso pendiente de configuración." }, { status: 503 });
+  }
   const address = request.headers.get("cf-connecting-ip") || "unknown";
   const now = Date.now();
   const record = failures.get(address);

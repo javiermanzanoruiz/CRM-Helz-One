@@ -102,3 +102,21 @@ Si se admite acceso mediante cabeceras `oai-authenticated-user-*`, el gateway de
 validarlas e impedir que un visitante las falsifique: el código confía en ellas.
 El usuario simulado de desarrollo no sustituye esta configuración. Quedan por
 validar los inicios de sesión reales por PIN y por Sites, con acceso autorizado.
+
+## Prueba con PIN y sin cuenta de ChatGPT
+
+Usa un Worker separado con HTTPS y una D1 de pruebas. Configura
+`CRM_AUTH_MODE=pin-only` y `CRM_DATA_OWNER_ID` con el identificador de
+propietario de los registros de prueba. Configura tres PIN aleatorios de
+8 a 32 dígitos, distintos entre sí, y un secreto de sesión aleatorio de
+al menos 32 caracteres en la configuración protegida del destino.
+Usa un límite persistente de intentos en el alojamiento para ambas
+rutas de acceso antes de introducir datos reales. El límite local de
+la aplicación vive en memoria de cada instancia.
+
+Con esta configuración, la API administrativa solo admite su sesión
+por PIN. Los profesionales usan `/profesionales` y los datos se limitan
+al propietario configurado. Con datos ficticios, comprueba el acceso y
+cierre de sesión para cada perfil, y que las cuentas profesionales
+pueden anotar fichas y no consultar la caja. Revisa el propietario de
+los registros históricos antes de cambiar el enlace habitual.

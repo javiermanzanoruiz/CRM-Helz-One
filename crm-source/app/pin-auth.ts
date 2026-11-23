@@ -1,3 +1,4 @@
+import { pinOnlyEnabled, pinOnlyOwnerId, pinOnlyReady } from "./pin-only";
 import { cookies } from "next/headers";
 import { env } from "cloudflare:workers";
 
@@ -30,7 +31,7 @@ export async function createPinSession() {
 }
 
 export async function pinSessionIsValid(value?: string) {
-  if (!value) return false;
+  if (!value || (pinOnlyEnabled() && !pinOnlyReady())) return false;
   const [payload, encodedSignature, extra] = value.split(".");
   if (!payload || !encodedSignature || extra) return false;
   try {
@@ -45,7 +46,7 @@ export async function pinSessionIsValid(value?: string) {
 
 export async function getPinOwnerId() {
   const session = (await cookies()).get(COOKIE)?.value;
-  return (await pinSessionIsValid(session)) ? "helzone-javier" : null;
+  return (await pinSessionIsValid(session)) ? (pinOnlyEnabled() ? pinOnlyOwnerId() : "helzone-javier") : null;
 }
 
 export const pinCookieName = COOKIE;

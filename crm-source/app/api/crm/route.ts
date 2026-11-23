@@ -1,3 +1,4 @@
+import { pinOnlyEnabled } from "../../pin-only";
 import { and, desc, eq } from "drizzle-orm";
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { getPinOwnerId } from "../../pin-auth";
@@ -44,6 +45,7 @@ const response = (body: unknown, status = 200) =>
   });
 
 async function ownerIdOrNull() {
+  if (pinOnlyEnabled()) return getPinOwnerId();
   const user = await getChatGPTUser();
   return user?.userId ?? await getPinOwnerId();
 }
