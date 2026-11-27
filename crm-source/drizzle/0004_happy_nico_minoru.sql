@@ -1,0 +1,1 @@
+ALTER TABLE `clients` ADD `important_notes` text DEFAULT '' NOT NULL;
